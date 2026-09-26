@@ -1,70 +1,65 @@
-// /server.js:  
-const express = require("express");
-const routes = require("./controllers");
-const cors = require("cors");
-const cron = require("node-cron");
+require('dotenv').config();
+const express = require('express');
+const cors = require('cors');
 const http = require('http');
-const { initWebSocketServer } = require('./websocket'); // Import WebSocket init function
-const sequelize = require("./config/connection");
+const sequelize = require('./config/connection');
+const routes = require('./controllers');
+const { errorHandler } = require('./middleware/publicApi');
+const { logInfo, logError } = require('./utils/logger');
+
+require('./models');
 
 const app = express();
 const PORT = process.env.PORT || 3005;
 
-const corsOptions = {
-  origin: "*",
-  credentials: true,
-  optionSuccessStatus: 200,
-};
-app.use(cors(corsOptions));
+app.disable('x-powered-by');
+app.use((req, res, next) => {
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-Frame-Options', 'DENY');
+  next();
+});
+const allowedOrigins = (process.env.CORS_ORIGIN || 'http://localhost:5173,http://localhost:3000')
+  .split(',')
+  .map((value) => value.trim())
+  .filter(Boolean);
 
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+app.use(
+  cors({
+    origin(origin, callback) {
+      if (!origin || allowedOrigins.includes('*') || allowedOrigins.includes(origin)) {
+        return callback(null, true);
+      }
+      return callback(null, false);
+    },
+    credentials: true,
+  })
+);
+app.use(express.json({ limit: '100kb' }));
+app.use(express.urlencoded({ extended: true, limit: '100kb' }));
+
+app.get('/health', (req, res) => {
+  res.json({ ok: true, service: 'drimplant-api' });
+});
 
 app.use(routes);
+app.use(errorHandler);
 
 const server = http.createServer(app);
-
-// Initialize WebSocket server after creating the HTTP server
-initWebSocketServer(server); // This initializes the WebSocket server
-
-// In production, do NOT run sequelize.sync() on boot — it can run many ALTERs and
-// exceed Heroku's ~30s boot timeout, causing SIGKILL and H10. Use migrations instead.
 const isProduction = process.env.NODE_ENV === 'production';
 
-function startHttpServer() {
+async function boot() {
+  await sequelize.authenticate();
+  if (!isProduction) {
+    await sequelize.sync({ alter: false });
+  }
   server.listen(PORT, () => {
-    console.log(`App listening on port ${PORT}!`);
-  });
-
-  cron.schedule('0 2 * * *', () => {
-    const { runProcurementIngests } = require('./jobs/scheduleProcurement');
-    runProcurementIngests().catch((e) =>
-      console.error('Procurement ingests failed:', e)
-    );
+    logInfo('listening', { route: `port ${PORT}` });
+    console.log(`drimplant-api listening on port ${PORT}`);
   });
 }
 
-if (isProduction) {
-  sequelize
-    .authenticate()
-    .then(() => {
-      console.log('Database connection OK. Starting HTTP server...');
-      startHttpServer();
-    })
-    .catch((err) => {
-      console.error('Database connection failed:', err);
-      process.exit(1);
-    });
-} else {
-  console.log('Starting Sequelize sync...');
-  sequelize
-    .sync({ force: false, alter: false })
-    .then(() => {
-      console.log('Sequelize sync completed. Starting HTTP server...');
-      startHttpServer();
-    })
-    .catch((err) => {
-      console.error('Failed to sync Sequelize or start server:', err);
-      process.exit(1);
-    });
-}
+boot().catch((err) => {
+  logError('boot_failed', { code: 'BOOT' });
+  console.error('Failed to start drimplant-api:', err.message);
+  process.exit(1);
+});

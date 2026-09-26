@@ -1,39 +1,94 @@
-# dog-api
+# drimplant-api
 
-gonna rock the world!
+Backend for the Dr. Implant system: acquisition, leads, consults, and the identity graph that will later power conversations, calls, and the dashboard.
 
+This is a Node / Express / MySQL / Sequelize service. Production will eventually run on Aptible. Local development uses fake/synthetic patient data only — never real PHI.
 
-   
-## Installation  
+## Stack
 
-- Go to the app's [repo](https://github.com/imanmansour86/choco-commerce) in github and clone the app
-- Open the app in VS code, navigate to .env file, change the DB_USER and DB_PW based on current user configurations
-- From terminal: navigate to app's directoty and run:
+- Node.js 20
+- Express
+- MySQL
+- Sequelize
 
-  ```md
-  $ npm install
-  ```
+Do not introduce Nest, GraphQL, Mongo, Prisma, or extra databases.
 
-- From terminal: navigate to db folder in the app's directoty and run:
+## Identity model
 
-  ```md
-  $ mysql -uroot - p
-  ```
+```text
+visitor_uuid   persistent anonymous browser identity (also PostHog distinct_id while anonymous)
+session_uuid   one browsing session under a Visitor
+lead_uuid      canonical known lead (email/phone/name are attributes, not identity keys)
+```
 
-- Run the schema file:
+A Visitor can have many Sessions. A Lead may point at a Visitor and a conversion Session, but Leads can also be created from Messenger, phone, SMS, or manual entry with no browser identity.
 
-  ```md
-  source schema.sql
-  ```
+When a Lead is created from a Visitor, the API records `V → L` in MySQL and (if PostHog is configured) identifies the lead so anonymous history can merge.
 
-- From terminal: navigate to the app's directoty and run:
+## Lead lifecycle
 
-  ```md
-  $ npm run seed
-  ```
+Stored values:
 
-- To invoke the app from terminal, run:
+```text
+lead
+booked_consult
+completed_consult
+canceled
+no_show
+treatment_accepted
+procedure_scheduled
+procedure_completed
+```
 
-  ```md
-  $ npm run watch
-  ```
+Lifecycle is not strictly linear. A lead can book, no-show, and book again. `Lead.current_stage` is the current value; `lead_stage_histories` keeps every transition.
+
+Consults are first-class records. One lead can have many consults (canceled, no-show, then completed).
+
+## Run locally
+
+**Node 20** and **MySQL 8+** on `127.0.0.1:3306`.
+
+```bash
+cp .env.example .env
+# edit DB_USER / DB_PASSWORD to match your local MySQL
+
+mysql -u root -e "CREATE DATABASE IF NOT EXISTS drimplant_db;"
+
+npm install
+npm run dev
+```
+
+Health check: [http://localhost:3005/health](http://localhost:3005/health)
+
+Public acquisition routes live under `/v1`. If `PUBLIC_API_KEY` is set, send it as `x-api-key`.
+
+```bash
+# visitor + session + lead (synthetic data)
+curl -s -X POST http://localhost:3005/v1/visitors -H 'Content-Type: application/json' -d '{}'
+```
+
+## Scripts
+
+| Command | What it does |
+|---|---|
+| `npm run dev` | Nodemon on port 3005 |
+| `npm start` | `node server.js` |
+| `npm test` | Core API tests (server must be running, or tests start it) |
+| `npm run migrate` | Run Sequelize migrations |
+
+In development the server also `sequelize.sync()` so empty local databases get tables without a separate migrate step. Production should use migrations only.
+
+## Integrations
+
+PostHog and Salesforce **clients are preserved**. They do nothing until env vars are set.
+
+- PostHog: anonymous events use `visitor_uuid`; known leads use `lead_uuid` plus `$identify` with `$anon_distinct_id`.
+- Salesforce: OAuth + CRUD helpers live in `integrations/salesforce/client.js`. Dr. Implant object mapping is not wired yet.
+
+Never send full Sequelize objects to vendors. Use explicit payload builders.
+
+## What this version does not include
+
+Messenger, SMS chat, call-center UI, dashboard frontend, scoring, and revenue accounting. The schema and `/v1` APIs are designed so those can attach later without splitting PHI into a second app.
+
+Store everything safely. Share selectively.

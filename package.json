@@ -1,24 +1,14 @@
 {
-  "name": "server",
+  "name": "drimplant-api",
   "version": "1.0.0",
-  "description": "",
+  "description": "Dr. Implant acquisition, lead, and consult API",
   "main": "server.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
+    "test": "node --test tests/*.test.js",
     "start": "node server.js",
-    "watch": "nodemon",
-    "migrate": "npx sequelize-cli db:migrate",
-    "migrate:undo": "npx sequelize-cli db:migrate:undo",
-    "seed:abm": "node scripts/seed-abm-defaults.js",
-    "abm:recompute": "node -e \"require('./abm/jobs/recomputeAccountIntent').runRecomputeIntentJob().then(()=>process.exit(0)).catch(e=>{console.error(e);process.exit(1)})\"",
-    "schedule:abm": "node jobs/scheduleAbmIntent.js",
-    "seed:procurement": "node scripts/seed-procurement-registry.js",
-    "seed:program-intelligence": "node scripts/seed-program-intelligence.js",
-    "import:sam": "node jobs/importSamOpportunities.js",
-    "ingest:usaspending": "node jobs/ingestUsaspendingAwards.js",
-    "ingest:spacewerx": "node jobs/ingestSpacewerxAwards.js",
-    "seed": "node seeds/index.js",
-    "heroku-postbuild": "npm prune --omit=dev && mkdir -p ./.cache && if [ -d /app/.cache/puppeteer ]; then mv /app/.cache/puppeteer ./.cache; fi"
+    "dev": "nodemon server.js",
+    "watch": "nodemon server.js",
+    "migrate": "npx sequelize-cli db:migrate"
   },
   "sequelize": {
     "config": "config/connection.js"

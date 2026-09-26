@@ -1,7 +1,7 @@
-const router = require("express").Router();
+const router = require('express').Router();
+const v1 = require('./v1');
+const { publicApiKey, rateLimit } = require('../middleware/publicApi');
 
-const api = require("./api/index");
-
-router.use("/api", api);
+router.use('/v1', rateLimit(), publicApiKey, v1);
 
 module.exports = router;

@@ -254,7 +254,7 @@ local MySQL
 Local database:
 
 ```text
-drimplant_dev
+drimplant_db
 ```
 
 Local development must use fake or synthetic patient data only.
@@ -2455,7 +2455,7 @@ Document:
 - local development
 - MySQL setup
 - `.env`
-- `drimplant_dev`
+- `drimplant_db`
 - migrations
 - tests
 - lifecycle stages
@@ -2671,7 +2671,7 @@ The initial refactor is complete when:
 5. Sequelize remains the ORM.
 6. Model relationships follow centralized existing conventions.
 7. Application runs locally.
-8. Local MySQL database is `drimplant_dev`.
+8. Local MySQL database is `drimplant_db`.
 9. Migrations build a clean Dr. Implant schema.
 10. Visitors work.
 11. Visitors persist across Sessions.

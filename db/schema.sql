@@ -1,2 +1,0 @@
-DROP DATABASE IF EXISTS popular_db;
-CREATE DATABASE popular_db;

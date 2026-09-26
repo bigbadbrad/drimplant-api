@@ -1,10 +1,12 @@
-// /models/user.js
 const { Model, DataTypes } = require('sequelize');
 const bcrypt = require('bcrypt');
 const sequelize = require('../config/connection');
 
 class User extends Model {
-  // You can add instance or class methods here if needed (e.g. password check)
+  async checkPassword(plain) {
+    if (!this.password_hash) return false;
+    return bcrypt.compare(plain, this.password_hash);
+  }
 }
 
 User.init(
@@ -15,114 +17,31 @@ User.init(
       primaryKey: true,
       defaultValue: DataTypes.UUIDV4,
     },
-    // Full name or "legal name"
     name: {
       type: DataTypes.STRING,
       allowNull: true,
     },
-    // For convenience, a user might have a shorter preferred name
-    preferred_name: {
-      type: DataTypes.STRING,
-      allowNull: true,
-    },
-    // For phone-based signups / notifications (KEEPING AS PRIMARY LOGIN)
-    // Note: unique omitted to avoid "Too many keys" error when users table has many indexes
-    phone: {
-      type: DataTypes.STRING,
-      allowNull: false,
-      validate: {
-        // e.g., must be digits only
-        is: /^[0-9]{10,15}$/,
-      },
-    },
-    // Standard email
-    // Note: unique omitted to avoid "Too many keys" error when users table has many indexes
     email: {
       type: DataTypes.STRING,
       allowNull: true,
-      validate: {
-        isEmail: true,
-      },
+      validate: { isEmail: true },
     },
-    // Password hash (renamed from password to match spec)
+    phone: {
+      type: DataTypes.STRING,
+      allowNull: true,
+    },
     password_hash: {
       type: DataTypes.STRING,
       allowNull: true,
-      defaultValue: '',
     },
-    // Role: internal_admin, internal_sales, customer_admin, customer_member
     role: {
-      type: DataTypes.ENUM('internal_admin', 'internal_sales', 'customer_admin', 'customer_member'),
+      type: DataTypes.ENUM('internal_admin', 'staff'),
       allowNull: false,
-      defaultValue: 'customer_member',
-    },
-    // If NULL → Internal user, if SET → Customer user
-    customer_company_id: {
-      type: DataTypes.UUID,
-      allowNull: true,
-      references: {
-        model: 'customer_companies',
-        key: 'id',
-      },
+      defaultValue: 'staff',
     },
     last_login_at: {
       type: DataTypes.DATE,
       allowNull: true,
-    },
-    // Legacy fields kept for compatibility
-    status: {
-      type: DataTypes.STRING,
-      allowNull: true,
-    },
-    is_staff: {
-      type: DataTypes.BOOLEAN,
-      allowNull: false,
-      defaultValue: false,
-    },
-    // Legacy password field (maps to password_hash for backward compatibility)
-    password: {
-      type: DataTypes.VIRTUAL,
-      get() {
-        return this.password_hash;
-      },
-      set(value) {
-        this.setDataValue('password_hash', value);
-      },
-    },
-    home: {
-      type: DataTypes.STRING,
-      allowNull: true,
-    },
-    stripeCustomerId: {
-      type: DataTypes.STRING,
-      allowNull: true,
-    },
-    resetPasswordToken: {
-      type: DataTypes.STRING,
-      allowNull: true,
-    },
-    resetPasswordExpires: {
-      type: DataTypes.DATE,
-      allowNull: true,
-    },
-    // For text messaging unsubscribes
-    isUnsubscribed: {
-      type: DataTypes.BOOLEAN,
-      allowNull: false,
-      defaultValue: false,
-    },
-    is_admin: {
-      type: DataTypes.BOOLEAN,
-      allowNull: false,
-      defaultValue: false,
-    },
-    referrerId: {
-      type: DataTypes.UUID,
-      allowNull: true,
-      references: {
-        model: 'users',
-        key: 'id',
-      },
     },
   },
   {
@@ -131,7 +50,19 @@ User.init(
     tableName: 'users',
     freezeTableName: true,
     underscored: true,
-    timestamps: true, // createdAt, updatedAt
+    timestamps: true,
+    hooks: {
+      async beforeCreate(user) {
+        if (user.password_hash && !user.password_hash.startsWith('$2')) {
+          user.password_hash = await bcrypt.hash(user.password_hash, 10);
+        }
+      },
+      async beforeUpdate(user) {
+        if (user.changed('password_hash') && user.password_hash && !user.password_hash.startsWith('$2')) {
+          user.password_hash = await bcrypt.hash(user.password_hash, 10);
+        }
+      },
+    },
   }
 );
 
