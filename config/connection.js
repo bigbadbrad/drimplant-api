@@ -1,12 +1,22 @@
 const Sequelize = require('sequelize');
 require('dotenv').config();
 
+const databaseUrl = process.env.JAWSDB_URL || process.env.DATABASE_URL;
+
+const mysqlSsl = {
+  ssl: {
+    require: true,
+    rejectUnauthorized: false,
+  },
+};
+
 let sequelize;
 
-if (process.env.JAWSDB_URL || process.env.DATABASE_URL) {
-  sequelize = new Sequelize(process.env.JAWSDB_URL || process.env.DATABASE_URL, {
+if (databaseUrl) {
+  sequelize = new Sequelize(databaseUrl, {
     dialect: 'mysql',
     logging: false,
+    dialectOptions: mysqlSsl,
   });
 } else {
   sequelize = new Sequelize(

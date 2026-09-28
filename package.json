@@ -10,6 +10,9 @@
     "watch": "nodemon server.js",
     "migrate": "npx sequelize-cli db:migrate"
   },
+  "engines": {
+    "node": "20.x"
+  },
   "sequelize": {
     "config": "config/connection.js"
   },
@@ -53,6 +56,7 @@
     "puppeteer": "^24.12.1",
     "redis": "^4.7.0",
     "sequelize": "^6.17.0",
+    "sequelize-cli": "^6.6.2",
     "sharp": "^0.33.3",
     "stream-json": "^1.9.1",
     "stripe": "^18.0.0",

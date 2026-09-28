@@ -92,3 +92,31 @@ Never send full Sequelize objects to vendors. Use explicit payload builders.
 Messenger, SMS chat, call-center UI, dashboard frontend, scoring, and revenue accounting. The schema and `/v1` APIs are designed so those can attach later without splitting PHI into a second app.
 
 Store everything safely. Share selectively.
+
+## Aptible (developer)
+
+Do not run Docker locally. Aptible still builds from a `Dockerfile` **on their servers** when you `git push` — they dropped Heroku-style buildpacks. That file is a build recipe, not a local Docker workflow.
+
+Until that file is in the repo, Aptible will not accept a git deploy.
+
+Once logged in (`aptible login`):
+
+```bash
+aptible environment:create drimplant-dev
+aptible db:create drimplant-db --type mysql --version 8.4 --environment drimplant-dev
+aptible apps:create drimplant-api --environment drimplant-dev
+# add the git remote printed by Aptible, then:
+git push aptible main
+```
+
+Set CORS after the app exists:
+
+```bash
+aptible config:set --app drimplant-api --environment drimplant-dev \
+  NODE_ENV=production \
+  CORS_ORIGIN=https://drimplant-widget.netlify.app,https://dr-implant.netlify.app
+```
+
+Expose the `web` service with an HTTPS endpoint, then point the widget’s `VITE_API_URL` at that URL and redeploy the widget.
+
+Migrations run on release via `.aptible.yml` (`npm run migrate`). Production does not `sequelize.sync()`.

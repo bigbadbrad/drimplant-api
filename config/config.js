@@ -20,5 +20,11 @@ module.exports = {
   production: {
     use_env_variable: process.env.JAWSDB_URL ? 'JAWSDB_URL' : 'DATABASE_URL',
     dialect: 'mysql',
+    dialectOptions: {
+      ssl: {
+        require: true,
+        rejectUnauthorized: false,
+      },
+    },
   },
 };
