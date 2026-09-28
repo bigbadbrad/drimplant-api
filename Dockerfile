@@ -10,4 +10,6 @@ RUN npm install --omit=dev --legacy-peer-deps
 
 COPY . .
 
+EXPOSE 3000
+
 CMD ["node", "server.js"]
