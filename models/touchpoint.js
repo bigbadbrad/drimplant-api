@@ -1,36 +1,17 @@
-const { Model, DataTypes } = require('sequelize');
-const sequelize = require('../config/connection');
+const { DataTypes, uuidPk, uuidCol, fk, defineModel } = require('./_schema');
 
-class Touchpoint extends Model {}
-
-Touchpoint.init(
+module.exports = defineModel(
+  'Touchpoint',
+  'touchpoints',
   {
-    id: {
-      type: DataTypes.UUID,
-      allowNull: false,
-      primaryKey: true,
-      defaultValue: DataTypes.UUIDV4,
-    },
-    visitor_id: {
-      type: DataTypes.UUID,
-      allowNull: true,
-      references: { model: 'visitors', key: 'id' },
-    },
-    session_id: {
-      type: DataTypes.UUID,
-      allowNull: true,
-      references: { model: 'sessions', key: 'id' },
-    },
-    lead_id: {
-      type: DataTypes.UUID,
-      allowNull: true,
-      references: { model: 'leads', key: 'id' },
-    },
-    occurred_at: {
-      type: DataTypes.DATE,
-      allowNull: false,
-      defaultValue: DataTypes.NOW,
-    },
+    id: uuidPk(),
+    touchpoint_uuid: uuidCol(),
+    contact_id: fk('contacts'),
+    lead_id: fk('leads'),
+    visitor_id: fk('visitors'),
+    session_id: fk('sessions'),
+    occurred_at: { type: DataTypes.DATE, allowNull: false, defaultValue: DataTypes.NOW },
+    channel: { type: DataTypes.STRING, allowNull: true },
     source: { type: DataTypes.STRING, allowNull: true },
     medium: { type: DataTypes.STRING, allowNull: true },
     campaign: { type: DataTypes.STRING, allowNull: true },
@@ -49,23 +30,18 @@ Touchpoint.init(
     fbclid: { type: DataTypes.STRING, allowNull: true },
     landing_page: { type: DataTypes.STRING, allowNull: true },
     landing_page_variant: { type: DataTypes.STRING, allowNull: true },
+    metadata: { type: DataTypes.JSON, allowNull: true },
   },
   {
-    sequelize,
-    modelName: 'Touchpoint',
-    tableName: 'touchpoints',
-    freezeTableName: true,
-    underscored: true,
-    timestamps: true,
     indexes: [
+      { unique: true, fields: ['touchpoint_uuid'] },
+      { fields: ['contact_id'] },
+      { fields: ['lead_id'] },
       { fields: ['visitor_id'] },
       { fields: ['session_id'] },
-      { fields: ['lead_id'] },
       { fields: ['gclid'] },
       { fields: ['fbclid'] },
       { fields: ['occurred_at'] },
     ],
   }
 );
-
-module.exports = Touchpoint;

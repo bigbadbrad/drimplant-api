@@ -40,22 +40,26 @@ async function capture({ distinctId, event, properties, timestamp }) {
 }
 
 /**
- * Merge anonymous visitor history into the known lead identity.
- * distinct_id becomes lead_uuid; $anon_distinct_id is the prior visitor_uuid.
+ * Merge anonymous visitor history into the known Contact identity.
+ * distinct_id becomes contact_uuid; $anon_distinct_id is the prior visitor_uuid.
  */
-async function identifyLead({ visitorUuid, leadUuid }) {
-  if (!isEnabled() || !visitorUuid || !leadUuid) return;
+async function identifyContact({ visitorUuid, contactUuid }) {
+  if (!isEnabled() || !visitorUuid || !contactUuid) return;
   try {
     await posthogFetch({
       event: '$identify',
-      distinct_id: leadUuid,
+      distinct_id: contactUuid,
       properties: {
         $anon_distinct_id: visitorUuid,
       },
     });
   } catch (err) {
-    logError('posthog_identify_failed', { visitor_uuid: visitorUuid, lead_uuid: leadUuid });
+    logError('posthog_identify_failed', { visitor_uuid: visitorUuid, contact_uuid: contactUuid });
   }
+}
+
+async function identifyLead({ visitorUuid, leadUuid, contactUuid }) {
+  return identifyContact({ visitorUuid, contactUuid: contactUuid || leadUuid });
 }
 
 async function runQuery(hogql, name = 'drimplant-query') {
@@ -87,6 +91,7 @@ async function runQuery(hogql, name = 'drimplant-query') {
 module.exports = {
   isEnabled,
   capture,
+  identifyContact,
   identifyLead,
   runQuery,
 };

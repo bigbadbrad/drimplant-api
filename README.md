@@ -1,8 +1,8 @@
 # drimplant-api
 
-Backend for the Dr. Implant system: acquisition, leads, consults, and the identity graph that will later power conversations, calls, and the dashboard.
+Backend for Dr. Implant: contacts, leads, appointments, treatments, and the identity graph that powers acquisition, call-center work, and (later) the dashboard.
 
-This is a Node / Express / MySQL / Sequelize service. Production will eventually run on Aptible. Local development uses fake/synthetic patient data only — never real PHI.
+This is a Node / Express / MySQL / Sequelize service. Production runs on Aptible. Local development uses fake/synthetic patient data only — never real PHI.
 
 ## Stack
 
@@ -13,36 +13,30 @@ This is a Node / Express / MySQL / Sequelize service. Production will eventually
 
 Do not introduce Nest, GraphQL, Mongo, Prisma, or extra databases.
 
-## Identity model
+## Domain model
+
+**User** is a Dr. Implant employee (call-center rep, treatment coordinator, manager, admin).
+
+**Contact** is the person. Email and phone live on Contact. External IDs (visitor, Open Dental, Salesforce) live on **ContactIdentity**.
+
+**Lead** is one acquisition episode for a Contact. A Contact can have many Leads. Lead `engagement_status` is call-center workflow only:
 
 ```text
-visitor_uuid   persistent anonymous browser identity (also PostHog distinct_id while anonymous)
-session_uuid   one browsing session under a Visitor
-lead_uuid      canonical known lead (email/phone/name are attributes, not identity keys)
+new
+first_attempt
+second_attempt
+third_attempt
+in_communication
+long_term_nurture
 ```
 
-A Visitor can have many Sessions. A Lead may point at a Visitor and a conversion Session, but Leads can also be created from Messenger, phone, SMS, or manual entry with no browser identity.
+**Appointment** is a scheduled consult (`scheduled`, `canceled`, `no_show`, `completed`). Booking an appointment does **not** change Lead engagement status.
 
-When a Lead is created from a Visitor, the API records `V → L` in MySQL and (if PostHog is configured) identifies the lead so anonymous history can merge.
+**Treatment** is the post-consult commercial workflow (`presented` → follow-ups → `won` / `lost` / `closed`). **Product** is an admin catalog. **TreatmentItem** snapshots list price at assignment. **Financing** is a separate status dimension.
 
-## Lead lifecycle
+Anonymous web identity is still **Visitor** / **Session**. When a widget submit creates a Lead, the visitor is stitched to the Contact (`ContactIdentity.visitor_uuid`) and PostHog `$identify` uses `contact_uuid`.
 
-Stored values:
-
-```text
-lead
-booked_consult
-completed_consult
-canceled
-no_show
-treatment_accepted
-procedure_scheduled
-procedure_completed
-```
-
-Lifecycle is not strictly linear. A lead can book, no-show, and book again. `Lead.current_stage` is the current value; `lead_stage_histories` keeps every transition.
-
-Consults are first-class records. One lead can have many consults (canceled, no-show, then completed).
+The live widget still `POST /v1/leads` with name, email, phone, visitor/session, source fields, and smile-profile `answers` JSON.
 
 ## Run locally
 
@@ -55,15 +49,17 @@ cp .env.example .env
 mysql -u root -e "CREATE DATABASE IF NOT EXISTS drimplant_db;"
 
 npm install
+npm run db:reset
 npm run dev
 ```
 
+`npm run db:reset` drops all tables, runs `001_initial_drimplant_schema`, and seeds fake admin/staff users plus the product catalog. The app does **not** wipe or sync schema on boot.
+
 Health check: [http://localhost:3005/health](http://localhost:3005/health)
 
-Public acquisition routes live under `/v1`. If `PUBLIC_API_KEY` is set, send it as `x-api-key`.
+Public acquisition routes live under `/v1`. If `PUBLIC_API_KEY` is set, send it as `x-api-key`. Product catalog admin routes also require a JWT for a User with role `admin` or `manager`.
 
 ```bash
-# visitor + session + lead (synthetic data)
 curl -s -X POST http://localhost:3005/v1/visitors -H 'Content-Type: application/json' -d '{}'
 ```
 
@@ -73,41 +69,35 @@ curl -s -X POST http://localhost:3005/v1/visitors -H 'Content-Type: application/
 |---|---|
 | `npm run dev` | Nodemon on port 3005 |
 | `npm start` | `node server.js` |
-| `npm test` | Core API tests (server must be running, or tests start it) |
+| `npm test` | API tests (server must already be running) |
 | `npm run migrate` | Run Sequelize migrations |
+| `npm run db:reset` | Drop all tables, migrate, seed fake data |
+| `npm run db:seed` | Seed fake users and products |
 
-In development the server also `sequelize.sync()` so empty local databases get tables without a separate migrate step. Production should use migrations only.
+Production reset is refused unless `ALLOW_DB_RESET=true`. Aptible reset must be deliberate.
 
 ## Integrations
 
 PostHog and Salesforce **clients are preserved**. They do nothing until env vars are set.
 
-- PostHog: anonymous events use `visitor_uuid`; known leads use `lead_uuid` plus `$identify` with `$anon_distinct_id`.
-- Salesforce: OAuth + CRUD helpers live in `integrations/salesforce/client.js`. Dr. Implant object mapping is not wired yet.
+- PostHog: anonymous events use `visitor_uuid`; known people use `contact_uuid` plus `$identify` with `$anon_distinct_id`.
+- Salesforce: OAuth + CRUD helpers live in `integrations/salesforce/client.js`. Dr. Implant object mapping is not wired yet. Salesforce can stay downstream during Phase 1.
 
 Never send full Sequelize objects to vendors. Use explicit payload builders.
 
-## What this version does not include
+Open Dental stays a separate clinical/financial system. `open_dental_pat_num` / `open_dental_appointment_id` and ContactIdentity types are ready for a later API integration.
 
-Messenger, SMS chat, call-center UI, dashboard frontend, scoring, and revenue accounting. The schema and `/v1` APIs are designed so those can attach later without splitting PHI into a second app.
+Messenger / SMS / Telnyx are not built. `Conversation`, `Message`, and `Call` models and `/v1` endpoints exist as extension points.
+
+## Workspaces (product)
+
+The dashboard (not in this repo) will have two operational workspaces: **Leads** (acquisition, engagement, tasks, calls, appointments) and **Treatments** (presentation, products, financing, won/lost). This API is the shared backend.
 
 Store everything safely. Share selectively.
 
 ## Aptible (developer)
 
-Do not run Docker locally. Aptible still builds from a `Dockerfile` **on their servers** when you `git push` — they dropped Heroku-style buildpacks. That file is a build recipe, not a local Docker workflow.
-
-Until that file is in the repo, Aptible will not accept a git deploy.
-
-Once logged in (`aptible login`):
-
-```bash
-aptible environment:create drimplant-dev
-aptible db:create drimplant-db --type mysql --version 8.4 --environment drimplant-dev
-aptible apps:create drimplant-api --environment drimplant-dev
-# add the git remote printed by Aptible, then:
-git push aptible main
-```
+Do not run Docker locally. Aptible still builds from a `Dockerfile` **on their servers** when GitHub Action deploys — they dropped Heroku-style buildpacks. That file is a build recipe, not a local Docker workflow.
 
 Set CORS after the app exists:
 
@@ -117,6 +107,4 @@ aptible config:set --app drimplant-api --environment drimplant-dev \
   CORS_ORIGIN=https://drimplant-widget.netlify.app,https://dr-implant.netlify.app
 ```
 
-Expose the `web` service with an HTTPS endpoint, then point the widget’s `VITE_API_URL` at that URL and redeploy the widget.
-
-Migrations run on release via `.aptible.yml` (`npm run migrate`). Production does not `sequelize.sync()`.
+Migrations run on release via `.aptible.yml` (`npm run migrate`). Production does not `sequelize.sync()` and will not run `db:reset` unless `ALLOW_DB_RESET=true`.

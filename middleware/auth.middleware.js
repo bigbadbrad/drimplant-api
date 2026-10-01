@@ -23,7 +23,7 @@ const authenticateToken = async (req, res, next) => {
 const requireInternalAdmin = async (req, res, next) => {
   await authenticateToken(req, res, () => {
     if (!req.user) return;
-    if (req.user.role !== 'internal_admin') {
+    if (!['admin', 'manager', 'internal_admin'].includes(req.user.role)) {
       return res.status(403).json({ error: { message: 'Admin only', code: 'FORBIDDEN' } });
     }
     next();

@@ -1,6 +1,6 @@
 const { Visitor, Session, Touchpoint, Event } = require('../models');
 const { HttpError } = require('../utils/httpError');
-const { isUuid, findVisitorByUuid, findSessionByUuid, findLeadByUuid } = require('./lead.service');
+const { findVisitorByUuid, findSessionByUuid, findLeadByUuid, isUuid } = require('./lookup');
 const posthog = require('../integrations/posthog/client');
 
 async function upsertVisitor(payload = {}) {
@@ -54,10 +54,12 @@ async function createTouchpoint(payload) {
   if (Number.isNaN(occurredAt.getTime())) throw new HttpError(400, 'Invalid occurred_at', 'INVALID_TIMESTAMP');
 
   const touchpoint = await Touchpoint.create({
+    contact_id: lead?.contact_id || null,
     visitor_id: visitor?.id || session?.visitor_id || null,
     session_id: session?.id || null,
     lead_id: lead?.id || null,
     occurred_at: occurredAt,
+    channel: payload.channel || null,
     source: payload.source || null,
     medium: payload.medium || null,
     campaign: payload.campaign || null,
@@ -76,6 +78,7 @@ async function createTouchpoint(payload) {
     fbclid: payload.fbclid || null,
     landing_page: payload.landing_page || null,
     landing_page_variant: payload.landing_page_variant || null,
+    metadata: payload.metadata || null,
   });
 
   if (session) {
@@ -104,6 +107,7 @@ async function createEvent(payload) {
   if (Number.isNaN(occurredAt.getTime())) throw new HttpError(400, 'Invalid occurred_at', 'INVALID_TIMESTAMP');
 
   const event = await Event.create({
+    contact_id: lead?.contact_id || null,
     visitor_id: visitor?.id || session?.visitor_id || null,
     session_id: session?.id || null,
     lead_id: lead?.id || null,
@@ -113,8 +117,18 @@ async function createEvent(payload) {
     occurred_at: occurredAt,
   });
 
-  const distinctId = lead?.lead_uuid || visitor?.visitor_uuid;
-  if (distinctId) {
+  const distinctId = lead ? null : visitor?.visitor_uuid;
+  if (lead) {
+    const contact = await lead.getContact();
+    posthog
+      .capture({
+        distinctId: contact.contact_uuid,
+        event: payload.event_type,
+        properties: payload.properties || {},
+        timestamp: occurredAt,
+      })
+      .catch(() => {});
+  } else if (distinctId) {
     posthog
       .capture({
         distinctId,

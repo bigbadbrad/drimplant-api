@@ -1,64 +1,24 @@
-const { Model, DataTypes } = require('sequelize');
-const sequelize = require('../config/connection');
+const { DataTypes, uuidPk, uuidCol, fk, defineModel } = require('./_schema');
 
-class SmileProfile extends Model {}
-
-SmileProfile.init(
+module.exports = defineModel(
+  'SmileProfile',
+  'smile_profiles',
   {
-    id: {
-      type: DataTypes.UUID,
-      allowNull: false,
-      primaryKey: true,
-      defaultValue: DataTypes.UUIDV4,
-    },
-    smile_profile_uuid: {
-      type: DataTypes.UUID,
-      allowNull: false,
-      unique: true,
-      defaultValue: DataTypes.UUIDV4,
-    },
-    lead_id: {
-      type: DataTypes.UUID,
-      allowNull: false,
-      references: { model: 'leads', key: 'id' },
-    },
-    visitor_id: {
-      type: DataTypes.UUID,
-      allowNull: true,
-      references: { model: 'visitors', key: 'id' },
-    },
-    session_id: {
-      type: DataTypes.UUID,
-      allowNull: true,
-      references: { model: 'sessions', key: 'id' },
-    },
-    workflow_id: {
-      type: DataTypes.STRING,
-      allowNull: true,
-    },
-    workflow_version: {
-      type: DataTypes.STRING,
-      allowNull: true,
-    },
-    landing_page: {
-      type: DataTypes.STRING,
-      allowNull: true,
-    },
-    answers: {
-      type: DataTypes.JSON,
-      allowNull: false,
-      defaultValue: {},
-    },
+    id: uuidPk(),
+    smile_profile_uuid: uuidCol(),
+    contact_id: fk('contacts'),
+    lead_id: fk('leads', { allowNull: false }),
+    visitor_id: fk('visitors'),
+    session_id: fk('sessions'),
+    workflow_id: { type: DataTypes.STRING, allowNull: true },
+    workflow_version: { type: DataTypes.STRING, allowNull: true },
+    landing_page: { type: DataTypes.STRING, allowNull: true },
+    answers: { type: DataTypes.JSON, allowNull: false, defaultValue: {} },
   },
   {
-    sequelize,
-    modelName: 'SmileProfile',
-    tableName: 'smile_profiles',
-    freezeTableName: true,
-    underscored: true,
-    timestamps: true,
     indexes: [
       { unique: true, fields: ['smile_profile_uuid'] },
+      { fields: ['contact_id'] },
       { fields: ['lead_id'] },
       { fields: ['visitor_id'] },
       { fields: ['session_id'] },
@@ -66,5 +26,3 @@ SmileProfile.init(
     ],
   }
 );
-
-module.exports = SmileProfile;

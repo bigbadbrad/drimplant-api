@@ -45,13 +45,9 @@ app.use(routes);
 app.use(errorHandler);
 
 const server = http.createServer(app);
-const isProduction = process.env.NODE_ENV === 'production';
 
 async function boot() {
   await sequelize.authenticate();
-  if (!isProduction) {
-    await sequelize.sync({ alter: false });
-  }
   server.listen(PORT, () => {
     logInfo('listening', { route: `port ${PORT}` });
     console.log(`drimplant-api listening on port ${PORT}`);
