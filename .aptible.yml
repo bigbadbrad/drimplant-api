@@ -1,2 +1,2 @@
 before_release:
-  - npm run migrate
+  - npm run migrate:release
