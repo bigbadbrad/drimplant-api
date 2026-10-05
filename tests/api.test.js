@@ -44,6 +44,20 @@ test('health', async () => {
   assert.equal(data.service, 'drimplant-api');
 });
 
+test('staff login issues a JWT', async () => {
+  const denied = await json('POST', '/v1/auth/login', { phone: '3055550100', password: 'wrong' });
+  assert.equal(denied.status, 401);
+
+  const ok = await json('POST', '/v1/auth/login', { phone: '3055550100', password: 'local-dev-only' });
+  assert.equal(ok.status, 200);
+  assert.ok(ok.data.data.token);
+  assert.equal(ok.data.data.user.phone, '3055550100');
+
+  const me = await json('GET', '/v1/auth/me', undefined, { Authorization: `Bearer ${ok.data.data.token}` });
+  assert.equal(me.status, 200);
+  assert.equal(me.data.data.phone, '3055550100');
+});
+
 test('visitor persists across sessions', async () => {
   const created = await json('POST', '/v1/visitors', {});
   assert.equal(created.status, 201);
@@ -137,6 +151,11 @@ test('lead creation with visitor, session, answers, and event', async () => {
   assert.equal(lead.data.data.source_detail, 'widget1');
   assert.equal(lead.data.data.landing_page, '/widget1/');
   assert.ok(lead.data.data.lead_uuid);
+
+  const contact = await json('GET', `/v1/contacts/${lead.data.data.contact_uuid}`);
+  const identityTypes = (contact.data.data.identities || []).map((row) => row.identity_type);
+  assert.ok(identityTypes.includes('visitor_uuid'));
+  assert.ok(identityTypes.includes('posthog_distinct_id'));
 
   const fetched = await json('GET', `/v1/leads/${lead.data.data.lead_uuid}`);
   assert.equal(fetched.status, 200);
@@ -357,4 +376,45 @@ test('treatment, products, items, and financing keep separate state', async () =
   assert.equal(approved.status, 200);
   assert.equal(approved.data.data.status, 'approved');
   assert.equal(won.data.data.status, 'won');
+});
+
+test('visitor list requires auth and includes converted visitors', async () => {
+  const denied = await json('GET', '/v1/visitors');
+  assert.equal(denied.status, 401);
+
+  const visitor = await json('POST', '/v1/visitors', {});
+  const visitorUuid = visitor.data.data.visitor_uuid;
+  const session = await json('POST', '/v1/sessions', {
+    visitor_uuid: visitorUuid,
+    landing_page: '/',
+    device_type: 'desktop',
+  });
+  await json('POST', '/v1/touchpoints', {
+    visitor_uuid: visitorUuid,
+    session_uuid: session.data.data.session_uuid,
+    utm_source: 'google',
+    utm_medium: 'cpc',
+    landing_page: '/',
+  });
+  const lead = await json('POST', '/v1/leads', {
+    visitor_uuid: visitorUuid,
+    session_uuid: session.data.data.session_uuid,
+    first_name: 'Listed',
+    last_name: 'Visitor',
+    email: 'listed.visitor@example.com',
+    phone: '3055550188',
+    source: 'widget',
+    tracking: { posthog_distinct_id: visitorUuid },
+  });
+  assert.equal(lead.status, 201);
+
+  const listed = await json('GET', '/v1/visitors', undefined, await adminHeaders());
+  assert.equal(listed.status, 200);
+  const row = (listed.data.data || []).find((item) => item.visitor_uuid === visitorUuid);
+  assert.ok(row);
+  assert.equal(row.status, 'converted');
+  assert.equal(row.lead_uuid, lead.data.data.lead_uuid);
+  assert.equal(row.contact_uuid, lead.data.data.contact_uuid);
+  assert.equal(row.email, 'listed.visitor@example.com');
+  assert.equal(row.landing_page, '/');
 });

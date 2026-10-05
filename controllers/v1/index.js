@@ -1,6 +1,7 @@
 const router = require('express').Router();
 const { asyncHandler } = require('../../utils/httpError');
-const { requireInternalAdmin } = require('../../middleware/auth.middleware');
+const { requireInternalAdmin, authenticateToken } = require('../../middleware/auth.middleware');
+const auth = require('../../services/auth.service');
 const acquisition = require('../../services/acquisition.service');
 const contacts = require('../../services/contact.service');
 const leads = require('../../services/lead.service');
@@ -13,6 +14,15 @@ router.get('/health', (req, res) => {
   res.json({ ok: true, service: 'drimplant-api' });
 });
 
+router.post('/auth/login', asyncHandler(async (req, res) => {
+  const result = await auth.login(req.body || {});
+  res.json({ data: result });
+}));
+
+router.get('/auth/me', authenticateToken, asyncHandler(async (req, res) => {
+  res.json({ data: auth.toPublicUser(req.user) });
+}));
+
 router.post('/visitors', asyncHandler(async (req, res) => {
   const visitor = await acquisition.upsertVisitor(req.body || {});
   res.status(201).json({
@@ -22,6 +32,21 @@ router.post('/visitors', asyncHandler(async (req, res) => {
       last_seen_at: visitor.last_seen_at,
     },
   });
+}));
+
+router.get('/visitors', authenticateToken, asyncHandler(async (req, res) => {
+  const rows = await acquisition.listVisitors(req.query || {});
+  res.json({ data: rows });
+}));
+
+router.get('/visitors/:id/activities', authenticateToken, asyncHandler(async (req, res) => {
+  const result = await acquisition.getVisitorActivity(req.params.id);
+  res.json({ data: result.events });
+}));
+
+router.get('/visitors/:id', authenticateToken, asyncHandler(async (req, res) => {
+  const row = await acquisition.getVisitor(req.params.id);
+  res.json({ data: row });
 }));
 
 router.post('/sessions', asyncHandler(async (req, res) => {

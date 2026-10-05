@@ -3,10 +3,9 @@ const { Lead, LeadStatusHistory, SmileProfile, Touchpoint } = require('../models
 const { HttpError } = require('../utils/httpError');
 const { clip } = require('../utils/fields');
 const { logInfo } = require('../utils/logger');
-const posthog = require('../integrations/posthog/client');
 const { LEAD_ENGAGEMENT_STATUSES } = require('../constants/statuses');
 const { findVisitorByUuid, findSessionByUuid, findLeadByUuid } = require('./lookup');
-const { resolveOrCreateContact, publicContact, contactAttrsFromPayload } = require('./contact.service');
+const { resolveOrCreateContact, publicContact, contactAttrsFromPayload, upsertIdentity } = require('./contact.service');
 const { recordActivity, recordEvent } = require('./activity.service');
 const { transitionLeadStatus } = require('./status.service');
 
@@ -136,6 +135,12 @@ async function createLead(payload) {
 
     await writeSmileProfile(lead, contact, payload, origin, visitor, session, transaction);
 
+    const tracking = payload.tracking && typeof payload.tracking === 'object' ? payload.tracking : {};
+    const posthogDistinctId = tracking.posthog_distinct_id || visitor?.visitor_uuid || null;
+    if (posthogDistinctId) {
+      await upsertIdentity(contact, 'posthog_distinct_id', posthogDistinctId, origin.source_type, transaction);
+    }
+
     const touchWhere = session
       ? { session_id: session.id, lead_id: null }
       : visitor
@@ -172,12 +177,6 @@ async function createLead(payload) {
 
     return { lead, contact };
   });
-
-  if (visitor) {
-    posthog
-      .identifyContact({ visitorUuid: visitor.visitor_uuid, contactUuid: result.contact.contact_uuid })
-      .catch(() => {});
-  }
 
   logInfo('lead_created', {
     lead_uuid: result.lead.lead_uuid,

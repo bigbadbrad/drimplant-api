@@ -57,7 +57,7 @@ npm run dev
 
 Health check: [http://localhost:3005/health](http://localhost:3005/health)
 
-Public acquisition routes live under `/v1`. If `PUBLIC_API_KEY` is set, send it as `x-api-key`. Product catalog admin routes also require a JWT for a User with role `admin` or `manager`.
+Public acquisition routes live under `/v1`. If `PUBLIC_API_KEY` is set, send it as `x-api-key`. Dashboard reads (including `GET /v1/visitors`) send a User JWT as `Authorization: Bearer …` and skip the public key check. Staff login is `POST /v1/auth/login` with the seeded local user `3055550100` / `local-dev-only`. Product catalog admin routes also require a JWT for a User with role `admin` or `manager`.
 
 ```bash
 curl -s -X POST http://localhost:3005/v1/visitors -H 'Content-Type: application/json' -d '{}'
@@ -80,7 +80,7 @@ Production reset is refused unless `ALLOW_DB_RESET=true`. Aptible reset must be 
 
 PostHog and Salesforce **clients are preserved**. They do nothing until env vars are set.
 
-- PostHog: anonymous events use `visitor_uuid`; known people use `contact_uuid` plus `$identify` with `$anon_distinct_id`.
+- PostHog: anonymous events use `visitor_uuid`; known people use `contact_uuid` plus `$identify` with `$anon_distinct_id`. Lead create also stores `ContactIdentity.posthog_distinct_id`. HogQL (`runQuery`, `getPersonDistinctIds`) enriches the authenticated visitor list when a personal/query key is set.
 - Salesforce: OAuth + CRUD helpers live in `integrations/salesforce/client.js`. Dr. Implant object mapping is not wired yet. Salesforce can stay downstream during Phase 1.
 
 Never send full Sequelize objects to vendors. Use explicit payload builders.

@@ -1,6 +1,9 @@
 function publicApiKey(req, res, next) {
+  if (req.method === 'POST' && /(^|\/)auth\/login\/?$/.test(req.path || '')) return next();
   const expected = process.env.PUBLIC_API_KEY;
   if (!expected) return next();
+  const auth = req.headers.authorization || '';
+  if (String(auth).startsWith('Bearer ')) return next();
   const provided = req.headers['x-api-key'];
   if (provided !== expected) {
     return res.status(401).json({ error: { message: 'Invalid API key', code: 'UNAUTHORIZED' } });
