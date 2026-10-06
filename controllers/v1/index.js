@@ -90,6 +90,11 @@ router.post('/contacts', asyncHandler(async (req, res) => {
   res.status(201).json({ data: contact });
 }));
 
+router.get('/contacts', authenticateToken, asyncHandler(async (req, res) => {
+  const rows = await contacts.listContacts(req.query || {});
+  res.json({ data: rows });
+}));
+
 router.get('/contacts/:id', asyncHandler(async (req, res) => {
   const contact = await contacts.getContact(req.params.id);
   res.json({ data: contact });

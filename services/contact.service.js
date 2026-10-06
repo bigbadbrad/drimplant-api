@@ -1,4 +1,4 @@
-const { Contact, ContactIdentity, Activity } = require('../models');
+const { Contact, ContactIdentity, Activity, Lead } = require('../models');
 const { HttpError } = require('../utils/httpError');
 const { clip, normalizeEmail, normalizePhone } = require('../utils/fields');
 const { isUuid } = require('../utils/ids');
@@ -123,6 +123,18 @@ async function resolveOrCreateContact(payload, { visitor, transaction } = {}) {
   return contact;
 }
 
+async function listContacts(query = {}) {
+  const limit = Math.min(Math.max(parseInt(query.limit, 10) || 100, 1), 200);
+  const offset = Math.max(parseInt(query.offset, 10) || 0, 0);
+  const rows = await Contact.findAll({
+    include: [{ model: Lead, as: 'leads', attributes: ['id'] }],
+    order: [['updated_at', 'DESC'], ['created_at', 'DESC']],
+    limit,
+    offset,
+  });
+  return rows.map((contact) => publicContact(contact, { lead_count: (contact.leads || []).length }));
+}
+
 async function createContact(payload) {
   const attrs = contactAttrsFromPayload(payload);
   const existing = await findContactByEmailOrPhone(attrs.email || null, attrs.phone || null);
@@ -192,6 +204,7 @@ module.exports = {
   resolveOrCreateContact,
   upsertIdentity,
   findContactByIdentity,
+  listContacts,
   createContact,
   getContact,
   patchContact,

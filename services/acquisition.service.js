@@ -150,6 +150,8 @@ function publicVisitor(visitor, extras = {}) {
   return {
     visitor_uuid: visitor.visitor_uuid,
     display_name: displayName(contact),
+    first_name: contact?.first_name || null,
+    last_name: contact?.last_name || null,
     email: contact?.email || null,
     phone: contact?.phone || null,
     location: null,
