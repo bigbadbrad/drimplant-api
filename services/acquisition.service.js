@@ -3,6 +3,7 @@ const { Visitor, Session, Touchpoint, Event, Lead, Contact, ContactIdentity } = 
 const { HttpError } = require('../utils/httpError');
 const { findVisitorByUuid, findSessionByUuid, findLeadByUuid, isUuid } = require('./lookup');
 const { friendlyEventDisplay, isUsefulEvent, collapseEvents, pageTitle, widgetCta } = require('../utils/visitorEvents');
+const { resolveVisitorSource } = require('../utils/trafficSource');
 
 async function upsertVisitor(payload = {}) {
   if (payload.visitor_uuid) {
@@ -154,7 +155,7 @@ function publicVisitor(visitor, extras = {}) {
     location: null,
     landing_page: firstTouch?.landing_page || latestSession?.landing_page || null,
     last_page: extras.last_page || latestSession?.landing_page || firstTouch?.landing_page || null,
-    source: firstTouch?.utm_source || firstTouch?.source || latestSession?.referrer || 'direct',
+    source: resolveVisitorSource(firstTouch, sessions),
     source_detail: firstTouch?.utm_campaign || firstTouch?.campaign || firstTouch?.medium || null,
     last_seen_at: visitor.last_seen_at,
     first_seen_at: visitor.first_seen_at,

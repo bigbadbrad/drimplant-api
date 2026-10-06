@@ -120,6 +120,11 @@ router.post('/leads', asyncHandler(async (req, res) => {
   res.status(201).json({ data: lead });
 }));
 
+router.get('/leads', authenticateToken, asyncHandler(async (req, res) => {
+  const rows = await leads.listLeads(req.query || {});
+  res.json({ data: rows });
+}));
+
 router.get('/leads/:id', asyncHandler(async (req, res) => {
   const lead = await leads.getLead(req.params.id);
   res.json({ data: lead });

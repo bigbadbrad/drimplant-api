@@ -1,5 +1,5 @@
 const sequelize = require('../config/connection');
-const { Lead, LeadStatusHistory, SmileProfile, Touchpoint } = require('../models');
+const { Lead, LeadStatusHistory, SmileProfile, Touchpoint, Contact } = require('../models');
 const { HttpError } = require('../utils/httpError');
 const { clip } = require('../utils/fields');
 const { logInfo } = require('../utils/logger');
@@ -191,6 +191,31 @@ async function createLead(payload) {
   });
 }
 
+async function listLeads(query = {}) {
+  const limit = Math.min(Math.max(parseInt(query.limit, 10) || 100, 1), 200);
+  const offset = Math.max(parseInt(query.offset, 10) || 0, 0);
+  const rows = await Lead.findAll({
+    include: [
+      { model: Contact, as: 'contact' },
+      {
+        model: SmileProfile,
+        as: 'smileProfiles',
+        separate: true,
+        limit: 1,
+        order: [['created_at', 'DESC']],
+      },
+    ],
+    order: [['created_at', 'DESC']],
+    limit,
+    offset,
+  });
+  return rows.map((lead) =>
+    publicLead(lead, lead.contact, {
+      extra: { smile_profiles: (lead.smileProfiles || []).map(publicSmileProfile) },
+    })
+  );
+}
+
 async function getLead(leadUuid) {
   const lead = await findLeadByUuid(leadUuid);
   const contact = await lead.getContact();
@@ -279,6 +304,7 @@ async function changeStatus(leadUuid, payload) {
 module.exports = {
   publicLead,
   createLead,
+  listLeads,
   getLead,
   patchLead,
   addSmileProfile,
