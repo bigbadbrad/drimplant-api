@@ -143,7 +143,10 @@ function collapseEvents(events) {
     out.push(labeled);
   }
   const ordered = placeOpenedBeforeSteps(out);
-  const newestFirst = ordered
+  const withoutOrphans = ordered.some((ev) => ev.event === 'widget_opened')
+    ? ordered
+    : ordered.filter((ev) => ev.event !== 'widget_step_viewed');
+  const newestFirst = withoutOrphans
     .map((ev, seq) => ({ ...ev, _seq: seq }))
     .sort((a, b) => {
       const dt = new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime();

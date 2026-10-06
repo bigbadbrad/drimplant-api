@@ -244,15 +244,22 @@ async function listVisitors(query = {}) {
   });
 
   const stats = await visitorPageStats(visitorIds);
-  return rows.map((row, index) => {
-    const match = stats.get(visitors[index].id);
-    if (!match) return row;
-    return {
-      ...row,
-      page_views: match.pageCount || row.page_views,
-      last_page: match.lastPage || row.last_page,
-    };
-  });
+  return rows
+    .map((row, index) => {
+      const match = stats.get(visitors[index].id);
+      const pageViews = match ? match.pageCount : 0;
+      return {
+        ...row,
+        page_views: pageViews,
+        last_page: match?.lastPage || (pageViews ? row.last_page : null),
+      };
+    })
+    .filter((row) => {
+      if (row.lead_uuid || row.contact_uuid || row.email || row.phone) return true;
+      if (Number(row.page_views) > 0) return true;
+      if (/^widget$/i.test(String(row.source || ''))) return false;
+      return true;
+    });
 }
 
 async function visitorPageStats(visitorIds) {
