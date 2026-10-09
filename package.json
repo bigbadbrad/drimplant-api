@@ -11,7 +11,8 @@
     "migrate": "sequelize-cli db:migrate",
     "migrate:release": "node scripts/migrate-release.js",
     "db:reset": "node scripts/db-reset.js && npm run migrate && npm run db:seed",
-    "db:seed": "node scripts/db-seed.js"
+    "db:seed": "node scripts/db-seed.js",
+    "db:seed-staff": "node scripts/seed-staff.js"
   },
   "engines": {
     "node": "20.x"

@@ -1,13 +1,14 @@
 const sequelize = require('../config/connection');
-const { Lead, LeadStatusHistory, SmileProfile, Touchpoint, Contact } = require('../models');
+const { Lead, LeadStatusHistory, SmileProfile, Touchpoint, Contact, ContactIdentity, User } = require('../models');
 const { HttpError } = require('../utils/httpError');
 const { clip } = require('../utils/fields');
 const { logInfo } = require('../utils/logger');
 const { LEAD_ENGAGEMENT_STATUSES } = require('../constants/statuses');
 const { findVisitorByUuid, findSessionByUuid, findLeadByUuid } = require('./lookup');
-const { resolveOrCreateContact, publicContact, contactAttrsFromPayload, upsertIdentity } = require('./contact.service');
+const { resolveOrCreateContact, publicContact, contactAttrsFromPayload, applyAddressAttrs, setIdentity, upsertIdentity } = require('./contact.service');
 const { recordActivity, recordEvent } = require('./activity.service');
 const { transitionLeadStatus } = require('./status.service');
+const { findDefaultLeadOwner, publicOwner, requireAssignableOwner } = require('./user.service');
 
 function originFromPayload(payload, session) {
   const sourceType = clip(payload.source_type || payload.source, 32) || 'api';
@@ -61,6 +62,21 @@ function publicLead(lead, contact, extras = {}) {
     email: contact?.email ?? null,
     phone: contact?.phone ?? null,
     preferred_language: contact?.preferred_language ?? null,
+    address: contact?.address ?? null,
+    street: contact?.street ?? null,
+    city: contact?.city ?? null,
+    state: contact?.state ?? null,
+    postal_code: contact?.postal_code ?? null,
+    open_dental_pat_num:
+      extras.extra?.open_dental_pat_num ??
+      (contact?.identities || []).find((row) => row.identity_type === 'open_dental_pat_num')?.identity_value ??
+      null,
+    best_time_to_call: contact?.best_time_to_call ?? null,
+    do_not_call: Boolean(contact?.do_not_call),
+    owner_user_id: extras.owner?.id || lead.owner_user_id || null,
+    owner: extras.owner ? publicOwner(extras.owner) : extras.extra?.owner || null,
+    location: lead.location || null,
+    service_interest: lead.service_interest || null,
     source: lead.source_type,
     source_type: lead.source_type,
     source_detail: lead.source_detail,
@@ -105,6 +121,9 @@ async function createLead(payload) {
   }
 
   const origin = originFromPayload(payload, session);
+  const owner = payload.owner_user_id
+    ? await requireAssignableOwner(payload.owner_user_id)
+    : await findDefaultLeadOwner();
 
   const result = await sequelize.transaction(async (transaction) => {
     const contact = await resolveOrCreateContact(payload, { visitor, transaction });
@@ -113,6 +132,9 @@ async function createLead(payload) {
         contact_id: contact.id,
         visitor_id: visitor ? visitor.id : session ? session.visitor_id : null,
         session_id: session ? session.id : null,
+        owner_user_id: owner?.id || null,
+        location: clip(payload.location, 64) || null,
+        service_interest: clip(payload.service_interest, 64) || null,
         source_type: origin.source_type,
         source_detail: origin.source_detail,
         landing_page: origin.landing_page,
@@ -188,6 +210,7 @@ async function createLead(payload) {
   return publicLead(result.lead, result.contact, {
     visitor_uuid: visitor?.visitor_uuid || null,
     session_uuid: session?.session_uuid || null,
+    owner,
   });
 }
 
@@ -196,7 +219,8 @@ async function listLeads(query = {}) {
   const offset = Math.max(parseInt(query.offset, 10) || 0, 0);
   const rows = await Lead.findAll({
     include: [
-      { model: Contact, as: 'contact' },
+      { model: Contact, as: 'contact', include: [{ model: ContactIdentity, as: 'identities' }] },
+      { model: User, as: 'owner' },
       {
         model: SmileProfile,
         as: 'smileProfiles',
@@ -209,8 +233,10 @@ async function listLeads(query = {}) {
     limit,
     offset,
   });
+  const defaultOwner = await findDefaultLeadOwner();
   return rows.map((lead) =>
     publicLead(lead, lead.contact, {
+      owner: lead.owner || defaultOwner,
       extra: { smile_profiles: (lead.smileProfiles || []).map(publicSmileProfile) },
     })
   );
@@ -218,7 +244,7 @@ async function listLeads(query = {}) {
 
 async function getLead(leadUuid) {
   const lead = await findLeadByUuid(leadUuid);
-  const contact = await lead.getContact();
+  const contact = await lead.getContact({ include: [{ model: ContactIdentity, as: 'identities' }] });
   const visitor = lead.visitor_id ? await lead.getVisitor() : null;
   const session = lead.session_id ? await lead.getSession() : null;
   const profiles = await SmileProfile.findAll({
@@ -229,11 +255,15 @@ async function getLead(leadUuid) {
     where: { lead_id: lead.id },
     order: [['changed_at', 'ASC']],
   });
+  const identities = contact?.identities || [];
+  const owner = lead.owner_user_id ? await User.findByPk(lead.owner_user_id) : null;
   return publicLead(lead, contact, {
     visitor_uuid: visitor?.visitor_uuid || null,
     session_uuid: session?.session_uuid || null,
+    owner: owner || (await findDefaultLeadOwner()),
     extra: {
-      contact: publicContact(contact),
+      open_dental_pat_num: identities.find((row) => row.identity_type === 'open_dental_pat_num')?.identity_value || null,
+      contact: publicContact(contact, { identities: identities.map((row) => ({ identity_type: row.identity_type, identity_value: row.identity_value })) }),
       smile_profiles: profiles.map(publicSmileProfile),
       status_history: history.map((row) => ({
         from_status: row.from_status,
@@ -255,14 +285,23 @@ async function patchLead(leadUuid, payload) {
   }
   if (payload.source_detail !== undefined) nextLead.source_detail = clip(payload.source_detail, 64);
   if (payload.landing_page !== undefined) nextLead.landing_page = clip(payload.landing_page, 255);
+  if (payload.owner_user_id !== undefined) {
+    const owner = await requireAssignableOwner(payload.owner_user_id);
+    nextLead.owner_user_id = owner?.id || null;
+  }
+  if (payload.location !== undefined) nextLead.location = clip(payload.location, 64) || null;
+  if (payload.service_interest !== undefined) nextLead.service_interest = clip(payload.service_interest, 64) || null;
   if (Object.keys(nextLead).length) await lead.update(nextLead);
 
   const personPatch = {};
-  for (const key of ['first_name', 'last_name', 'email', 'phone', 'preferred_language', 'date_of_birth', 'location_id', 'primary_location_id']) {
+  for (const key of ['first_name', 'last_name', 'email', 'phone', 'preferred_language', 'address', 'street', 'city', 'state', 'postal_code', 'best_time_to_call', 'do_not_call', 'date_of_birth', 'location_id', 'primary_location_id']) {
     if (payload[key] !== undefined) personPatch[key] = payload[key];
   }
   if (Object.keys(personPatch).length) {
-    await contact.update(contactAttrsFromPayload(personPatch));
+    await contact.update(applyAddressAttrs(contact, contactAttrsFromPayload(personPatch)));
+  }
+  if (payload.open_dental_pat_num !== undefined) {
+    await setIdentity(contact, 'open_dental_pat_num', payload.open_dental_pat_num, 'dashboard');
   }
   return getLead(leadUuid);
 }

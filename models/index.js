@@ -1,4 +1,5 @@
 const User = require('./user');
+const UserLogin = require('./user_login');
 const ApiKey = require('./api_key');
 const Visitor = require('./visitor');
 const Session = require('./session');
@@ -22,6 +23,9 @@ const TreatmentStatusHistory = require('./treatment_status_history');
 const TreatmentItem = require('./treatment_item');
 const Financing = require('./financing');
 const FinancingStatusHistory = require('./financing_status_history');
+
+User.hasMany(UserLogin, { foreignKey: 'user_id', as: 'logins' });
+UserLogin.belongsTo(User, { foreignKey: 'user_id', as: 'user' });
 
 Visitor.hasMany(Session, { foreignKey: 'visitor_id', as: 'sessions' });
 Session.belongsTo(Visitor, { foreignKey: 'visitor_id', as: 'visitor' });
@@ -138,6 +142,7 @@ FinancingStatusHistory.belongsTo(User, { foreignKey: 'changed_by_user_id', as: '
 
 module.exports = {
   User,
+  UserLogin,
   ApiKey,
   Visitor,
   Session,

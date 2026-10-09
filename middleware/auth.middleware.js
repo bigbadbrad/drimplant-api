@@ -23,8 +23,18 @@ const authenticateToken = async (req, res, next) => {
 const requireInternalAdmin = async (req, res, next) => {
   await authenticateToken(req, res, () => {
     if (!req.user) return;
-    if (!['admin', 'manager', 'internal_admin'].includes(req.user.role)) {
+    if (!User.isAdminRole(req.user.role)) {
       return res.status(403).json({ error: { message: 'Admin only', code: 'FORBIDDEN' } });
+    }
+    next();
+  });
+};
+
+const requireSuperAdmin = async (req, res, next) => {
+  await authenticateToken(req, res, () => {
+    if (!req.user) return;
+    if (!User.isSuperRole(req.user.role)) {
+      return res.status(403).json({ error: { message: 'Super user only', code: 'FORBIDDEN' } });
     }
     next();
   });
@@ -33,4 +43,5 @@ const requireInternalAdmin = async (req, res, next) => {
 module.exports = {
   authenticateToken,
   requireInternalAdmin,
+  requireSuperAdmin,
 };

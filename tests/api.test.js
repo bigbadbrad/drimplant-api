@@ -165,6 +165,38 @@ test('lead creation with visitor, session, answers, and event', async () => {
   assert.equal(fetched.data.data.contact.phone, '3055550100');
 });
 
+test('lead patch updates contact fields', async () => {
+  const lead = await json('POST', '/v1/leads', {
+    first_name: 'Bo',
+    last_name: 'Derek',
+    email: 'bo@foxy.com',
+    phone: '3055550123',
+    source_type: 'manual',
+  });
+  assert.equal(lead.status, 201);
+  const patched = await json('PATCH', `/v1/leads/${lead.data.data.lead_uuid}`, {
+    first_name: 'Bo',
+    last_name: 'Derek',
+    preferred_language: 'English',
+    street: '123 Ocean Dr',
+    city: 'Miami',
+    state: 'FL',
+    postal_code: '33139',
+    best_time_to_call: 'After 3:00 PM',
+    do_not_call: true,
+  });
+  assert.equal(patched.status, 200);
+  assert.equal(patched.data.data.last_name, 'Derek');
+  assert.equal(patched.data.data.preferred_language, 'English');
+  assert.equal(patched.data.data.street, '123 Ocean Dr');
+  assert.equal(patched.data.data.city, 'Miami');
+  assert.equal(patched.data.data.state, 'FL');
+  assert.equal(patched.data.data.postal_code, '33139');
+  assert.equal(patched.data.data.address, '123 Ocean Dr\nMiami, FL 33139');
+  assert.equal(patched.data.data.best_time_to_call, 'After 3:00 PM');
+  assert.equal(patched.data.data.do_not_call, true);
+});
+
 test('lead creation works without visitor or session', async () => {
   const lead = await json('POST', '/v1/leads', {
     first_name: 'Phone',

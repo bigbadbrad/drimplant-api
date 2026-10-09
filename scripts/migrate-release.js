@@ -48,6 +48,7 @@ async function main() {
   }
 
   run('npm run migrate');
+  run('npm run db:seed-staff');
 }
 
 main().catch((err) => {

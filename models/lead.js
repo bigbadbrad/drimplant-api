@@ -13,6 +13,8 @@ module.exports = defineModel(
     source_type: { type: DataTypes.STRING, allowNull: true },
     source_detail: { type: DataTypes.STRING, allowNull: true },
     landing_page: { type: DataTypes.STRING, allowNull: true },
+    location: { type: DataTypes.STRING, allowNull: true },
+    service_interest: { type: DataTypes.STRING, allowNull: true },
     engagement_status: { type: DataTypes.STRING, allowNull: false, defaultValue: 'new' },
   },
   {
@@ -26,6 +28,8 @@ module.exports = defineModel(
       { fields: ['source_type'] },
       { fields: ['source_detail'] },
       { fields: ['landing_page'] },
+      { fields: ['location'] },
+      { fields: ['service_interest'] },
       { fields: ['created_at'] },
     ],
   }

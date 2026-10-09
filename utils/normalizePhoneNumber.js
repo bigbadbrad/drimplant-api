@@ -12,8 +12,8 @@ function normalizePhoneNumber(phoneNumber) {
   // Ensure input is a string and remove all non-digit characters
   phoneNumber = phoneNumber?.toString().replace(/\D/g, "");
 
-  // Remove leading '1' if it exists
-  if (phoneNumber.startsWith("1")) {
+  // US country code: strip a leading 1 only from 11-digit numbers.
+  if (phoneNumber.length === 11 && phoneNumber.startsWith("1")) {
     phoneNumber = phoneNumber.slice(1);
   }
 

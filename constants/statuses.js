@@ -37,7 +37,7 @@ const MESSAGE_DIRECTIONS = ['inbound', 'outbound'];
 const MESSAGE_SENDER_TYPES = ['prospect', 'bot', 'agent', 'system'];
 const CALL_DIRECTIONS = ['inbound', 'outbound'];
 
-const USER_ROLES = ['admin', 'manager', 'staff', 'call_center_rep', 'treatment_coordinator'];
+const USER_ROLES = ['super_admin', 'admin', 'manager', 'internal_admin', 'staff', 'call_center_rep', 'treatment_coordinator'];
 const USER_STATUSES = ['active', 'inactive'];
 
 const IDENTITY_TYPES = [

@@ -53,11 +53,11 @@ npm run db:reset
 npm run dev
 ```
 
-`npm run db:reset` drops all tables, runs `001_initial_drimplant_schema`, and seeds fake admin/staff users plus the product catalog. The app does **not** wipe or sync schema on boot.
+`npm run db:reset` drops all tables, runs migrations, and seeds fake admin/staff users plus the product catalog. `npm run db:seed-staff` is additive and safe in production: it creates clinic dashboard accounts if they are missing. The app does **not** wipe or sync schema on boot.
 
 Health check: [http://localhost:3005/health](http://localhost:3005/health)
 
-Public acquisition routes live under `/v1`. If `PUBLIC_API_KEY` is set, send it as `x-api-key`. Dashboard reads (including `GET /v1/visitors`) send a User JWT as `Authorization: Bearer …` and skip the public key check. Staff login is `POST /v1/auth/login` with the seeded local user `3055550100` / `local-dev-only`. Product catalog admin routes also require a JWT for a User with role `admin` or `manager`.
+Public acquisition routes live under `/v1`. If `PUBLIC_API_KEY` is set, send it as `x-api-key`. Dashboard reads (including `GET /v1/visitors`) send a User JWT as `Authorization: Bearer …` and skip the public key check. Staff login is `POST /v1/auth/login` with email or phone plus password. Local reset still includes `3055550100` / `local-dev-only`. Clinic staff accounts (Roxanne V, Brad Meinert, and the rest) are seeded with email addresses like `brad.meinert@drimplantexpert.com`. Product catalog admin routes also require a JWT for a User with role `admin` or `manager`. Login history is stored on `user_logins` (`GET /v1/users/logins`).
 
 ```bash
 curl -s -X POST http://localhost:3005/v1/visitors -H 'Content-Type: application/json' -d '{}'
@@ -72,7 +72,8 @@ curl -s -X POST http://localhost:3005/v1/visitors -H 'Content-Type: application/
 | `npm test` | API tests (server must already be running) |
 | `npm run migrate` | Run Sequelize migrations |
 | `npm run db:reset` | Drop all tables, migrate, seed fake data |
-| `npm run db:seed` | Seed fake users and products |
+| `npm run db:seed` | Seed fake users, clinic staff, and products |
+| `npm run db:seed-staff` | Create clinic dashboard users if missing (safe in production) |
 
 Production reset is refused unless `ALLOW_DB_RESET=true`. Aptible reset must be deliberate.
 

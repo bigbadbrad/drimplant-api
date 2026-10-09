@@ -1,7 +1,8 @@
 const router = require('express').Router();
 const { asyncHandler } = require('../../utils/httpError');
-const { requireInternalAdmin, authenticateToken } = require('../../middleware/auth.middleware');
+const { requireInternalAdmin, requireSuperAdmin, authenticateToken } = require('../../middleware/auth.middleware');
 const auth = require('../../services/auth.service');
+const users = require('../../services/user.service');
 const acquisition = require('../../services/acquisition.service');
 const contacts = require('../../services/contact.service');
 const leads = require('../../services/lead.service');
@@ -14,13 +15,49 @@ router.get('/health', (req, res) => {
   res.json({ ok: true, service: 'drimplant-api' });
 });
 
+function requestIp(req) {
+  const forwarded = req.headers['x-forwarded-for'];
+  if (typeof forwarded === 'string' && forwarded.trim()) {
+    return forwarded.split(',')[0].trim();
+  }
+  return req.ip || req.socket?.remoteAddress || null;
+}
+
 router.post('/auth/login', asyncHandler(async (req, res) => {
-  const result = await auth.login(req.body || {});
+  const result = await auth.login(req.body || {}, {
+    ip: requestIp(req),
+    userAgent: req.headers['user-agent'] || null,
+  });
   res.json({ data: result });
 }));
 
 router.get('/auth/me', authenticateToken, asyncHandler(async (req, res) => {
   res.json({ data: auth.toPublicUser(req.user) });
+}));
+
+router.post('/auth/change-password', authenticateToken, asyncHandler(async (req, res) => {
+  const result = await auth.changePassword(req.user.id, req.body || {});
+  res.json({ data: result });
+}));
+
+router.get('/users', authenticateToken, asyncHandler(async (req, res) => {
+  const rows = await users.listUsers();
+  res.json({ data: rows });
+}));
+
+router.get('/users/logins', authenticateToken, asyncHandler(async (req, res) => {
+  const rows = await users.listLogins(req.query || {});
+  res.json({ data: rows });
+}));
+
+router.post('/users', requireSuperAdmin, asyncHandler(async (req, res) => {
+  const row = await users.createUser(req.body || {});
+  res.status(201).json({ data: row });
+}));
+
+router.delete('/users/:id', requireSuperAdmin, asyncHandler(async (req, res) => {
+  const result = await users.deleteUser(req.params.id, req.user);
+  res.json({ data: result });
 }));
 
 router.post('/visitors', asyncHandler(async (req, res) => {

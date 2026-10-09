@@ -13,6 +13,14 @@ function publicContact(contact, extras = {}) {
     email: contact.email,
     phone: contact.phone,
     preferred_language: contact.preferred_language,
+    address: contact.address,
+    open_dental_pat_num: patNumFrom(contact, extras),
+    street: contact.street,
+    city: contact.city,
+    state: contact.state,
+    postal_code: contact.postal_code,
+    best_time_to_call: contact.best_time_to_call,
+    do_not_call: Boolean(contact.do_not_call),
     date_of_birth: contact.date_of_birth,
     primary_location_id: contact.primary_location_id,
     created_at: contact.created_at,
@@ -32,6 +40,42 @@ function publicIdentity(row) {
   };
 }
 
+function patNumFrom(contact, extras = {}) {
+  const identities = extras.identities || contact?.identities || [];
+  return (
+    identities.find((row) => row.identity_type === 'open_dental_pat_num')?.identity_value ||
+    extras.open_dental_pat_num ||
+    null
+  );
+}
+
+function composeAddress(parts) {
+  const street = String(parts.street || '').trim();
+  const city = String(parts.city || '').trim();
+  const state = String(parts.state || '').trim();
+  const postal = String(parts.postal_code || '').trim();
+  const line2 = [city, [state, postal].filter(Boolean).join(' ')].filter(Boolean).join(', ');
+  return [street, line2].filter(Boolean).join('\n') || null;
+}
+
+function applyAddressAttrs(current, attrs) {
+  const hasParts = ['street', 'city', 'state', 'postal_code'].some((key) => attrs[key] !== undefined);
+  if (attrs.state === undefined && !current.state && (hasParts || !current.id)) {
+    attrs.state = 'FL';
+  }
+  if (hasParts) {
+    attrs.address = composeAddress({
+      street: attrs.street !== undefined ? attrs.street : current.street,
+      city: attrs.city !== undefined ? attrs.city : current.city,
+      state: attrs.state !== undefined ? attrs.state : current.state,
+      postal_code: attrs.postal_code !== undefined ? attrs.postal_code : current.postal_code,
+    });
+  } else if (attrs.address !== undefined && !current.street && attrs.street === undefined) {
+    attrs.street = attrs.address;
+  }
+  return attrs;
+}
+
 function contactAttrsFromPayload(payload) {
   const attrs = {};
   if (payload.first_name !== undefined) attrs.first_name = clip(payload.first_name, 64);
@@ -39,6 +83,13 @@ function contactAttrsFromPayload(payload) {
   if (payload.email !== undefined) attrs.email = normalizeEmail(payload.email);
   if (payload.phone !== undefined) attrs.phone = normalizePhone(payload.phone);
   if (payload.preferred_language !== undefined) attrs.preferred_language = clip(payload.preferred_language, 32);
+  if (payload.street !== undefined) attrs.street = clip(payload.street, 255);
+  if (payload.city !== undefined) attrs.city = clip(payload.city, 64);
+  if (payload.state !== undefined) attrs.state = clip(payload.state, 64);
+  if (payload.postal_code !== undefined) attrs.postal_code = clip(payload.postal_code, 16);
+  if (payload.address !== undefined) attrs.address = clip(payload.address, 255);
+  if (payload.best_time_to_call !== undefined) attrs.best_time_to_call = clip(payload.best_time_to_call, 64);
+  if (payload.do_not_call !== undefined) attrs.do_not_call = Boolean(payload.do_not_call);
   if (payload.date_of_birth !== undefined) attrs.date_of_birth = payload.date_of_birth || null;
   if (payload.primary_location_id !== undefined || payload.location_id !== undefined) {
     const loc = payload.primary_location_id || payload.location_id;
@@ -92,6 +143,40 @@ async function upsertIdentity(contact, identityType, identityValue, source, tran
   );
 }
 
+async function setIdentity(contact, identityType, identityValue, source, transaction) {
+  const type = clip(identityType, 64);
+  if (!type) return null;
+  const value = clip(identityValue, 255);
+  const current = await ContactIdentity.findOne({
+    where: { contact_id: contact.id, identity_type: type },
+    transaction,
+  });
+  if (!value) {
+    if (current) await current.destroy({ transaction });
+    return null;
+  }
+  const taken = await ContactIdentity.findOne({
+    where: { identity_type: type, identity_value: value },
+    transaction,
+  });
+  if (taken && taken.contact_id !== contact.id) {
+    throw new HttpError(409, 'Patient ID already belongs to another contact', 'IDENTITY_CONFLICT');
+  }
+  if (current) {
+    await current.update({ identity_value: value, source: source || current.source }, { transaction });
+    return current;
+  }
+  return ContactIdentity.create(
+    {
+      contact_id: contact.id,
+      identity_type: type,
+      identity_value: value,
+      source: source || null,
+    },
+    { transaction }
+  );
+}
+
 async function resolveOrCreateContact(payload, { visitor, transaction } = {}) {
   let contact = null;
   if (payload.contact_uuid) {
@@ -112,9 +197,9 @@ async function resolveOrCreateContact(payload, { visitor, transaction } = {}) {
     for (const [key, value] of Object.entries(attrs)) {
       if (value != null && value !== '') next[key] = value;
     }
-    if (Object.keys(next).length) await contact.update(next, { transaction });
+    if (Object.keys(next).length) await contact.update(applyAddressAttrs(contact, next), { transaction });
   } else {
-    contact = await Contact.create(attrs, { transaction });
+    contact = await Contact.create(applyAddressAttrs({}, attrs), { transaction });
   }
 
   if (visitor) {
@@ -127,7 +212,10 @@ async function listContacts(query = {}) {
   const limit = Math.min(Math.max(parseInt(query.limit, 10) || 100, 1), 200);
   const offset = Math.max(parseInt(query.offset, 10) || 0, 0);
   const rows = await Contact.findAll({
-    include: [{ model: Lead, as: 'leads', attributes: ['id'] }],
+    include: [
+      { model: Lead, as: 'leads', attributes: ['id'] },
+      { model: ContactIdentity, as: 'identities' },
+    ],
     order: [['updated_at', 'DESC'], ['created_at', 'DESC']],
     limit,
     offset,
@@ -139,10 +227,10 @@ async function createContact(payload) {
   const attrs = contactAttrsFromPayload(payload);
   const existing = await findContactByEmailOrPhone(attrs.email || null, attrs.phone || null);
   if (existing) {
-    await existing.update(attrs);
+    await existing.update(applyAddressAttrs(existing, attrs));
     return publicContact(existing);
   }
-  const contact = await Contact.create(attrs);
+  const contact = await Contact.create(applyAddressAttrs({}, attrs));
   return publicContact(contact);
 }
 
@@ -157,7 +245,10 @@ async function getContact(contactUuid) {
 
 async function patchContact(contactUuid, payload) {
   const contact = await findContactByUuid(contactUuid);
-  await contact.update(contactAttrsFromPayload(payload));
+  await contact.update(applyAddressAttrs(contact, contactAttrsFromPayload(payload)));
+  if (payload.open_dental_pat_num !== undefined) {
+    await setIdentity(contact, 'open_dental_pat_num', payload.open_dental_pat_num, 'dashboard');
+  }
   return getContact(contactUuid);
 }
 
@@ -201,6 +292,8 @@ async function createActivity(contactUuid, payload) {
 module.exports = {
   publicContact,
   contactAttrsFromPayload,
+  applyAddressAttrs,
+  setIdentity,
   resolveOrCreateContact,
   upsertIdentity,
   findContactByIdentity,

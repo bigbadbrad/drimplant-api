@@ -45,8 +45,12 @@ User.prototype.checkPassword = async function checkPassword(plain) {
   return bcrypt.compare(plain, this.password_hash);
 };
 
+User.isSuperRole = function isSuperRole(role) {
+  return role === 'super_admin' || role === 'internal_admin';
+};
+
 User.isAdminRole = function isAdminRole(role) {
-  return role === 'admin' || role === 'manager' || role === 'internal_admin';
+  return User.isSuperRole(role) || role === 'admin' || role === 'manager';
 };
 
 User.ROLES = USER_ROLES;

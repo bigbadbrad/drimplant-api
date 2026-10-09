@@ -8,6 +8,7 @@ if (isProduction && process.env.ALLOW_DB_RESET !== 'true') {
 
 const { User, Product } = require('../models');
 const sequelize = require('../config/connection');
+const { seedStaffUsers } = require('./staff-users');
 
 const PRODUCTS = [
   { name: 'Cancellation Fee', code: 'CANCEL_FEE', list_price: '1500.00', sort_order: 10 },
@@ -46,6 +47,8 @@ async function seed() {
     },
   });
 
+  await seedStaffUsers(User);
+
   for (const product of PRODUCTS) {
     await Product.findOrCreate({
       where: { code: product.code },
@@ -58,7 +61,7 @@ async function seed() {
   }
 
   await sequelize.close();
-  console.log('Seeded fake admin/staff users and product catalog.');
+  console.log('Seeded fake admin/staff users, clinic staff accounts, and product catalog.');
 }
 
 seed().catch((err) => {
